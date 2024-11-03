@@ -44,7 +44,7 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None):
         max_link_distance = 1000
     net = networkx.Graph()
     stops_gdf=gpd.read_file('/content/drive/MyDrive/safegraph/stops_gdf.geojson')
-    _add_stops_to_net(net, gtfs.get_table("stops"),stops_gdf)
+    _add_stops_and_pois_to_net(net, gtfs.get_table("stops"), stops_gdf)
     stop_distances = gtfs.get_table("stop_distances")
     if stop_distances["d_walk"][0] is None:
         osm_distances_available = False
