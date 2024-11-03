@@ -1,4 +1,3 @@
-setuptools>=18.0
 pandas
 networkx
 pyshp
@@ -7,7 +6,7 @@ nose
 Cython
 six
 geoindex
-osmread==0.2
+osmnx==1.9.4
 geojson>=2.0.0
 shapely
 pyproj
