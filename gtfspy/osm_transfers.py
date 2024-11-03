@@ -1,9 +1,8 @@
 import os
 
-import networkx
+import networkx as nx
 import pandas
-from osmread import parse_file, Way, Node
-
+import osmnx as ox
 from gtfspy.gtfs import GTFS
 from gtfspy.util import wgs84_distance
 
@@ -12,9 +11,12 @@ from warnings import warn
 from geoindex import GeoGridIndex, GeoPoint
 
 
-def add_walk_distances_to_db_python(gtfs, osm_path, cutoff_distance_m=1000):
+import osmnx as ox
+import networkx as nx
+
+def add_walk_distances_to_db_python(gtfs, place, network_type,cutoff_distance_m=1000):
     """
-    Computes the walk paths between stops, and updates these to the gtfs database.
+    Computes the walk paths between stops and updates these to the gtfs database.
 
     Parameters
     ----------
@@ -28,18 +30,16 @@ def add_walk_distances_to_db_python(gtfs, osm_path, cutoff_distance_m=1000):
     Returns
     -------
     None
-
-    See Also
-    --------
-    gtfspy.calc_transfers
-    compute_walk_paths_java
     """
     if isinstance(gtfs, str):
         gtfs = GTFS(gtfs)
-    assert (isinstance(gtfs, GTFS))
+    assert isinstance(gtfs, GTFS)
+
     print("Reading in walk network")
-    walk_network = create_walk_network_from_osm(osm_path)
+    # Use OSMnx to load the walkable street network from the OSM file
+    walk_network = ox.graph_from_place(place, network_type)
     print("Matching stops to the OSM network")
+    # Use the previously modified function that matches GTFS stops to OSM nodes
     stop_I_to_nearest_osm_node, stop_I_to_nearest_osm_node_distance = match_stops_to_nodes(gtfs, walk_network)
 
     transfers = gtfs.get_straight_line_transfer_distances()
@@ -51,28 +51,40 @@ def add_walk_distances_to_db_python(gtfs, osm_path, cutoff_distance_m=1000):
         from_I_to_to_stop_Is[from_I].add(to_I)
 
     print("Computing walking distances")
+    # Iterate over each stop pair
     for from_I, to_stop_Is in from_I_to_to_stop_Is.items():
         from_node = stop_I_to_nearest_osm_node[from_I]
         from_dist = stop_I_to_nearest_osm_node_distance[from_I]
-        shortest_paths = networkx.single_source_dijkstra_path_length(walk_network,
-                                                                     from_node,
-                                                                     cutoff=cutoff_distance_m - from_dist,
-                                                                     weight="distance")
+
+        # Calculate shortest paths from the 'from_node' using Dijkstra's algorithm with OSMnx
+        shortest_paths = nx.single_source_dijkstra_path_length(
+            walk_network, 
+            from_node, 
+            cutoff=cutoff_distance_m - from_dist, 
+            weight="length"
+        )
+
+        # Loop through each destination stop to calculate total walking distances
         for to_I in to_stop_Is:
             to_distance = stop_I_to_nearest_osm_node_distance[to_I]
             to_node = stop_I_to_nearest_osm_node[to_I]
             osm_distance = shortest_paths.get(to_node, float('inf'))
             total_distance = from_dist + osm_distance + to_distance
+
+            # Get the straight-line distance from GTFS
             from_stop_I_transfers = transfers[transfers['from_stop_I'] == from_I]
-            straigth_distance = from_stop_I_transfers[from_stop_I_transfers["to_stop_I"] == to_I]["d"].values[0]
-            assert (straigth_distance < total_distance + 2)  # allow for a maximum  of 2 meters in calculations
+            straight_distance = from_stop_I_transfers[from_stop_I_transfers["to_stop_I"] == to_I]["d"].values[0]
+
+            # Ensure calculated distance is accurate (allow a small margin)
+            assert (straight_distance < total_distance + 2)  # Allow a max of 2 meters in the calculations
+
+            # If the total walking distance is within the cutoff, update the GTFS database
             if total_distance <= cutoff_distance_m:
-                gtfs.conn.execute("UPDATE stop_distances "
-                                  "SET d_walk = " + str(int(total_distance)) +
-                                  " WHERE from_stop_I=" + str(from_I) + " AND to_stop_I=" + str(to_I))
+                gtfs.conn.execute(f"UPDATE stop_distances SET d_walk = {int(total_distance)} "
+                                  f"WHERE from_stop_I={from_I} AND to_stop_I={to_I}")
 
+    # Commit the changes to the database
     gtfs.conn.commit()
-
 
 def match_stops_to_nodes(gtfs, walk_network):
     """
@@ -88,34 +100,35 @@ def match_stops_to_nodes(gtfs, walk_network):
     stop_I_to_dist: dict
         maps stop_I to the distance to the closest walk_network node
     """
-    network_nodes = walk_network.nodes(data="true")
-
+    # Extract node coordinates from the OSMnx walkable network
+    network_nodes = {node: (data['y'], data['x']) for node, data in walk_network.nodes(data=True)}
+    
+    # Get the list of stop_I and their coordinates from the GTFS data
     stop_Is = set(gtfs.get_straight_line_transfer_distances()['from_stop_I'])
     stops_df = gtfs.stops()
 
-    geo_index = GeoGridIndex(precision=6)
-    for net_node, data in network_nodes:
-        geo_index.add_point(GeoPoint(data['lat'], data['lon'], ref=net_node))
+    # Initialize dictionaries to store results
     stop_I_to_node = {}
     stop_I_to_dist = {}
+
+    # Iterate through all stops in the GTFS data
     for stop_I in stop_Is:
+        # Get stop latitude and longitude
         stop_lat = float(stops_df[stops_df.stop_I == stop_I].lat)
         stop_lon = float(stops_df[stops_df.stop_I == stop_I].lon)
-        geo_point = GeoPoint(stop_lat, stop_lon)
-        min_dist = float('inf')
-        min_dist_node = None
-        search_distances_m = [0.100, 0.500]
-        for search_distance_m in search_distances_m:
-            for point, distance in geo_index.get_nearest_points(geo_point, search_distance_m, "km"):
-                if distance < min_dist:
-                    min_dist = distance * 1000
-                    min_dist_node = point.ref
-            if min_dist_node is not None:
-                break
-        if min_dist_node is None:
-            warn("No OSM node found for stop: " + str(stops_df[stops_df.stop_I == stop_I]))
-        stop_I_to_node[stop_I] = min_dist_node
-        stop_I_to_dist[stop_I] = min_dist
+
+        # Find the nearest network node to the stop using OSMnx
+        nearest_node = ox.distance.nearest_nodes(walk_network, stop_lon, stop_lat)
+        nearest_node_lat = network_nodes[nearest_node][0]
+        nearest_node_lon = network_nodes[nearest_node][1]
+
+        # Calculate the Euclidean distance between the stop and the nearest network node
+        dist = ox.distance.great_circle_vec(stop_lat, stop_lon, nearest_node_lat, nearest_node_lon)  # in meters
+
+        # Store the results
+        stop_I_to_node[stop_I] = nearest_node
+        stop_I_to_dist[stop_I] = dist
+
     return stop_I_to_node, stop_I_to_dist
 
 
@@ -124,46 +137,11 @@ OSM_HIGHWAY_WALK_TAGS = {"trunk", "trunk_link", "primary", "primary_link", "seco
                          "cycleway", "footway"}
 
 
-def create_walk_network_from_osm(osm_file):
-    walk_network = networkx.Graph()
-    assert (os.path.exists(osm_file))
-    ways = []
-    for i, entity in enumerate(parse_file(osm_file)):
-        if isinstance(entity, Node):
-            walk_network.add_node(entity.id, lat=entity.lat, lon=entity.lon)
-        elif isinstance(entity, Way):
-            if "highway" in entity.tags:
-                if entity.tags["highway"] in OSM_HIGHWAY_WALK_TAGS:
-                    ways.append(entity)
-    for way in ways:
-        walk_network.add_path(way.nodes)
-    del ways
-
-    # Remove all singleton nodes (note that taking the giant component does not necessarily provide proper results.
-    for node, degree in walk_network.degree().items():
-        if degree is 0:
-            walk_network.remove_node(node)
-
-    node_lats = networkx.get_node_attributes(walk_network, 'lat')
-    node_lons = networkx.get_node_attributes(walk_network, 'lon')
-    for source, dest, data in walk_network.edges(data=True):
-        data["distance"] = wgs84_distance(node_lats[source],
-                                          node_lons[source],
-                                          node_lats[dest],
-                                          node_lons[dest])
-    return walk_network
-
-
-def compute_walk_paths_java(gtfs_db_path, osm_file, cache_db=None):
-    """
-    Parameters
-    ----------
-    gtfs_db_path: str (path to the gtfs database)
-    osm_file: str
-    cache_db: str
-
-    Returns
-    -------
-    None
-    """
-    raise NotImplementedError("This has not been pipelined yet. Please see the Python code.")
+#def create_walk_network_from_osm(place,network_type):
+  #walk_network = ox.graph_from_place(place, network_type=network_type)
+  #walk_network = ox.project_graph(walk_network)
+  #meters_per_minute = 4.5 * 1000 / 60
+  
+  #for u, v, k, data in walk_network.edges(data=True, keys=True):
+    #data['time'] = data['length'] / meters_per_minute
+    #return walk_network
