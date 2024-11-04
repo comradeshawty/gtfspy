@@ -5,6 +5,7 @@ from gtfspy import route_types
 from gtfspy.util import wgs84_distance, graph_node_attrs
 from warnings import warn
 import geopandas as gpd
+from ast import literal_eval
 
 ALL_STOP_TO_STOP_LINK_ATTRIBUTES = [
     "capacity_estimate", "duration_min", "duration_max",
@@ -43,7 +44,7 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None):
     if max_link_distance is None:
         max_link_distance = 1000
     net = networkx.Graph()
-    stops_gdf=gpd.read_file('/content/drive/MyDrive/safegraph/stops_gdf.geojson')
+    stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
     _add_stops_and_pois_to_net(net, gtfs.get_table("stops"), stops_gdf)
     stop_distances = gtfs.get_table("stop_distances")
     if stop_distances["d_walk"][0] is None:
@@ -109,7 +110,7 @@ def stop_to_stop_network_for_route_type(gtfs,
 
     stops_dataframe = gtfs.get_stops_for_route_type(route_type)
     net = networkx.DiGraph()
-    _add_stops_to_net(net, stops_dataframe)
+    _add_stops_and_pois_to_net(net, stops_dataframe)
 
     events_df = gtfs.get_transit_events(start_time_ut=start_time_ut,
                                         end_time_ut=end_time_ut,
@@ -240,21 +241,26 @@ def _add_stops_and_pois_to_net(net, stops, stops_gdf):
             "name": stop.name
         }
         net.add_node(stop.stop_I, **stop_data)
+    for stop in stops_gdf.itertuples():
+      stop_row = stops_gdf.loc[stops_gdf['stop_id'] == stop.stop_I]
+      if not stop_row.empty:
+          # Use literal_eval to convert strings back to lists if needed
+          nearby_pois = stop_row['nearby_pois'].values[0]
+          if isinstance(nearby_pois, str):
+              nearby_pois = literal_eval(nearby_pois)
 
-        # Retrieve POIs and distances
-        stop_row = stops_gdf.loc[stops_gdf['stop_id'] == stop.stop_I]
-        if not stop_row.empty:
-            nearby_pois = stop_row['nearby_pois'].values[0]
-            nearby_distances = stop_row['nearby_distances'].values[0]
-            
-            # Add each POI as a node and connect it to the stop with an edge weighted by distance
-            for poi_id, distance in zip(nearby_pois, nearby_distances):
-                # Add POI node if it doesn't already exist
-                if poi_id not in net:
-                    net.add_node(poi_id, type="POI")  # Add any POI-specific attributes as needed
+          nearby_distances = stop_row['nearby_distances'].values[0]
+          if isinstance(nearby_distances, str):
+              nearby_distances = literal_eval(nearby_distances)
 
-                # Add an edge from the stop to the POI with distance as weight
-                net.add_edge(stop.stop_I, poi_id, weight=distance)
+          # Now iterate through nearby_pois and add them as nodes and edges
+          for poi, distance in zip(nearby_pois, nearby_distances):
+              # Add each POI as a node if not already present
+              if poi not in net:
+                  net.add_node(poi, type="POI")  # Customize attributes for POIs as needed
+
+              # Add an edge between the stop and the POI with the distance as the weight
+              net.add_edge(stop.stop_I, poi, weight=distance)
 
 
 
