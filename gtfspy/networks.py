@@ -4,6 +4,8 @@ from math import isnan
 from gtfspy import route_types
 from gtfspy.util import wgs84_distance, graph_node_attrs
 from warnings import warn
+from ast import literal_eval
+
 
 ALL_STOP_TO_STOP_LINK_ATTRIBUTES = [
     "capacity_estimate", "duration_min", "duration_max",
