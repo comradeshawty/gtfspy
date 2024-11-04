@@ -42,7 +42,8 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None):
     if max_link_distance is None:
         max_link_distance = 1000
     net = networkx.Graph()
-    _add_stops_to_net(net, gtfs.get_table("stops"))
+    stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
+    _add_stops_and_pois_to_net(net, gtfs.get_table("stops"), stops_gdf)
     stop_distances = gtfs.get_table("stop_distances")
     if stop_distances["d_walk"][0] is None:
         osm_distances_available = False
@@ -107,7 +108,9 @@ def stop_to_stop_network_for_route_type(gtfs,
 
     stops_dataframe = gtfs.get_stops_for_route_type(route_type)
     net = networkx.DiGraph()
-    _add_stops_to_net(net, stops_dataframe)
+    stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
+
+    _add_stops_and_pois_to_net(net, stops_dataframe, stops_gdf)
 
     events_df = gtfs.get_transit_events(start_time_ut=start_time_ut,
                                         end_time_ut=end_time_ut,
@@ -218,22 +221,42 @@ def combined_stop_to_stop_transit_network(gtfs, start_time_ut=None, end_time_ut=
         multi_di_graph.add_nodes_from(graph.nodes(data=True))
     return multi_di_graph
 
-def _add_stops_to_net(net, stops):
+def _add_stops_and_pois_to_net(net, stops, stops_gdf):
     """
-    Add nodes to the network from the pandas dataframe describing (a part of the) stops table in the GTFS database.
+    Add stop nodes and their nearby POIs as nodes in the network, connecting stops to POIs with weighted edges.
 
     Parameters
     ----------
     net: networkx.Graph
     stops: pandas.DataFrame
+        DataFrame containing stop details.
+    stops_gdf: pandas.DataFrame
+        DataFrame containing stop details, nearby POIs, and distances.
     """
     for stop in stops.itertuples():
-        data = {
+        # Add stop node
+        stop_data = {
             "lat": stop.lat,
             "lon": stop.lon,
             "name": stop.name
         }
-        net.add_node(stop.stop_I, **data)
+        net.add_node(stop.stop_I, **stop_data)
+    for stop in stops_gdf.itertuples():
+
+        # Retrieve POIs and distances
+        stop_row = stops_gdf.loc[stops_gdf['stop_id'] == stop.stop_I]
+        if not stop_row.empty:
+            nearby_pois = stop_row['nearby_pois'].values[0]
+            nearby_distances = stop_row['nearby_distances'].values[0]
+            
+            # Add each POI as a node and connect it to the stop with an edge weighted by distance
+            for poi_id, distance in zip(nearby_pois, nearby_distances):
+                # Add POI node if it doesn't already exist
+                if poi_id not in net:
+                    net.add_node(poi_id, type="POI")  # Add any POI-specific attributes as needed
+
+                # Add an edge from the stop to the POI with distance as weight
+                net.add_edge(stop.stop_I, poi_id, weight=distance)
 
 
 def temporal_network(gtfs,
