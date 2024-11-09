@@ -1,7 +1,6 @@
 from matplotlib import pyplot as plt
 from matplotlib import rc
 
-import example_import
 from gtfspy.routing.helpers import get_transit_connections, get_walk_network
 from gtfspy.gtfs import GTFS
 
@@ -9,9 +8,44 @@ from gtfspy.routing.multi_objective_pseudo_connection_scan_profiler import Multi
 from gtfspy.routing.node_profile_analyzer_time_and_veh_legs import NodeProfileAnalyzerTimeAndVehLegs
 G = GTFS('test.db')
 from collections import defaultdict
+import numpy as np
+import geopandas as gpd
+import pandas as pd
+from scipy.spatial import cKDTree
+from shapely import Point
+#Get stops and census file
+census_gdf = gpd.read_file('/content/drive/MyDrive/safegraph/core/brh_cbg.geojson')
+stops=G.get_table("stops")
+#create geodataframe
+stops['geometry'] = stops.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
+stops_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326")
+stops_gdf = stops_gdf.to_crs(epsg=32616)
+stops_gdf['x'] = stops_gdf.geometry.x
+stops_gdf['y'] = stops_gdf.geometry.y
+#create stops ckdtree
+stop_coords = list(zip(stops_gdf.geometry.x, stops_gdf.geometry.y))
+stop_tree=cKDTree(stop_coords)
 
-# Initialize the matrix to store average transit times
-T_transit = defaultdict(dict)
+#create cbg tree 
+census_gdf=census_gdf.to_crs(epsg=32616)
+cbg_coords = np.array(list(zip(census_gdf.geometry.centroid.x, census_gdf.geometry.centroid.y)))
+cbg_tree = cKDTree(cbg_coords)
+
+#link cbgs to stops
+radius=2000
+results=[]
+for idx,cbg_coord in enumerate(cbg_coords):
+  stop_indices = stop_tree.query_ball_point(cbg_coord, radius)
+  nearby_stops = [stops_gdf.iloc[i]['stop_id'] for i in stop_indices]
+  results.append({
+      'cbg_id': census_gdf.iloc[idx]['GEOID'],  # Use CBG ID here
+      'nearby_stops': nearby_stops
+    })
+cbgs_to_stops=pd.DataFrame(results)
+cbgs_to_stops = cbgs_to_stops[cbgs_to_stops['nearby_stops'].apply(lambda x: len(x) > 0)].reset_index(drop=True)
+cbg_to_stops = cbgs_to_stops.set_index('cbg_id')['nearby_stops'].to_dict()
+cbg_ids = list(cbg_to_stops.keys())
+
 
 #from_stop_name = "Ahkiotie 2 E"
 #to_stop_name = "Kauppahalli P"
@@ -25,6 +59,8 @@ T_transit = defaultdict(dict)
  #       to_stop_I = stop_I
 #assert (from_stop_I is not None)
 #assert (to_stop_I is not None)
+# Initialize the matrix to store average transit times
+T_transit = defaultdict(dict)
 
 # The start and end times between which PT operations (and footpaths) are scanned:
 ANALYSIS_START_TIME_UT = G.get_suitable_date_for_daily_extract(ut=True) + 10 * 3600 
@@ -112,7 +148,7 @@ for i, n_o in enumerate(cbg_ids):
 # use tex in plotting
 #rc("text", usetex=True)
 #fig1 = analyzer.plot_new_transfer_temporal_distance_profile(timezone=timezone_pytz,
-                                                            format_string="%H:%M")
+                                                            #format_string="%H:%M")
 #fig2 = analyzer.plot_temporal_distance_pdf_horizontal(use_minutes=True)
 #print("Showing...")
 #plt.show()
