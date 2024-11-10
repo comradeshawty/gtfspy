@@ -117,6 +117,34 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
     
     return walk_network, cbg_node_ids
 
+def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_start_time, analysis_end_time):
+    """
+    Compute travel time matrix between CBG centroids using MultiObjectivePseudoCSAProfiler.
+
+    Parameters
+    ----------
+    G : GTFS
+        GTFS object containing transit information.
+    walk_network : networkx.Graph
+        Walk network graph.
+    cbg_ids : list
+        List of CBG IDs.
+    cbg_node_ids : dict
+        Mapping of CBG IDs to unique node IDs.
+    analysis_start_time : int
+        Start time of analysis in UNIX seconds.
+    analysis_end_time : int
+        End time of analysis in UNIX seconds.
+
+    Returns
+    -------
+    pd.DataFrame
+        Travel time matrix DataFrame.
+    """
+    connections = get_transit_connections(G, analysis_start_time, analysis_end_time + 2 * 3600)
+    T_cbg = {}
+
+    all_node_ids = set(walk_network.nodes())
 
     for idx, origin_cbg_id in enumerate(cbg_ids):
         origin_node_id = cbg_node_ids[origin_cbg_id]
