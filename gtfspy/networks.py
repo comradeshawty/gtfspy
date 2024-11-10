@@ -45,19 +45,23 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
         max_link_distance = 1000
     net = networkx.Graph()
     if pois==False:
-        _add_stops_to_net(net, gtfs.get_table("stops"))
+        _add_stops_to_net(net, stops_gdf)
 
     else:
         stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
         _add_stops_and_pois_to_net(net, gtfs.get_table("stops"), stops_gdf)
     stop_distances = gtfs.get_table("stop_distances")
+
     if stop_distances["d_walk"][0] is None:
         osm_distances_available = False
         warn("Warning: OpenStreetMap-based walking distances have not been computed, using euclidean distances instead."
              "Ignore this warning if running unit tests.")
+        stop_distances=stop_distances.drop('d_walk', axis=1)
+        stop_distances=stop_distances.rename(columns={"d": "d_walk"})
+
     else:
         osm_distances_available = True
-
+        
     for stop_distance_tuple in stop_distances.itertuples():
         from_node = stop_distance_tuple.from_stop_I
         to_node = stop_distance_tuple.to_stop_I
@@ -67,12 +71,11 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
                 continue
             data = {'d': stop_distance_tuple.d, 'd_walk': stop_distance_tuple.d_walk}
         else:
-            if stop_distance_tuple.d > max_link_distance:
+            if stop_distance_tuple.d_walk > max_link_distance:
                 continue
-            data = {'d': stop_distance_tuple.d}
+            data = {'d_walk': stop_distance_tuple.d_walk}
         net.add_edge(from_node, to_node, **data)
     return net
-
 
 def stop_to_stop_network_for_route_type(gtfs,
                                         route_type,
