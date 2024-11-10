@@ -60,13 +60,37 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
                 'lat': cbg_coord[1],
                 'lon': cbg_coord[0]
             })
-    return pd.DataFrame(results),stops_gdf
+    return pd.DataFrame(results)
 
 def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
+    """
+    Add CBG centroids as nodes and connect them to nearby stops in the walk network.
 
-    #Assign unique integer node IDs to CBGs
+    Parameters
+    ----------
+    walk_network : networkx.Graph
+        The existing walk network graph.
+    cbgs_to_stops : pd.DataFrame
+        DataFrame mapping CBG centroids to nearby stops.
+    stops_gdf : GeoDataFrame
+        GeoDataFrame containing stops information.
+    
+    Returns
+    -------
+    networkx.Graph
+        Updated walk network graph.
+    """
+    # Validate that stops_gdf is a DataFrame
+    if not isinstance(stops_gdf, pd.DataFrame):
+        raise TypeError("stops_gdf should be a pandas DataFrame")
+
+    # Ensure that stop IDs are integers
     stops_gdf['stop_id'] = stops_gdf['stop_id'].astype(int)
+    
+    # Assign unique integer node IDs to CBGs
     max_stop_id = stops_gdf['stop_id'].max()
+    
+    # Extract unique CBG IDs and assign unique node IDs
     cbg_node_ids = {cbg_id: max_stop_id + idx + 1 for idx, cbg_id in enumerate(cbgs_to_stops['cbg_id'].unique())}
 
     # Add nodes for each CBG centroid
@@ -83,13 +107,14 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
         
         cbg_coord = np.array([row['lon'], row['lat']])
         for stop_id in stop_ids:
+            # Find stop index to access coordinates in stops_gdf
             stop_idx = stops_gdf[stops_gdf['stop_id'] == stop_id].index[0]
             stop_coord = np.array([stops_gdf.iloc[stop_idx].geometry.x, stops_gdf.iloc[stop_idx].geometry.y])
             
             # Calculate Euclidean distance and add edges
             distance = np.linalg.norm(cbg_coord - stop_coord)
             walk_network.add_edge(node_id, stop_id, d_walk=distance)
-            #walk_network.add_edge(stop_id, node_id, d_walk=distance)
+            walk_network.add_edge(stop_id, node_id, d_walk=distance)
     
     return walk_network
 
