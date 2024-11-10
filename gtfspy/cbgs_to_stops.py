@@ -49,17 +49,16 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
     # Map each CBG to its nearby stops
     results = []
     for idx, cbg_coord in enumerate(cbg_coords):
-        stop_indices = stop_tree.query_ball_point(cbg_coord, radius)
-        if stop_indices:
-            stop_I = [stops_gdf.iloc[i]['stop_I'] for i in stop_indices]
-            stop_name = [stops_gdf.iloc[i]['name'] for i in stop_indices]
-            results.append({
-                'cbg_id': census_gdf.iloc[idx]['GEOID'],
-                'stop_I': stop_I,
-                'stop_name': stop_name,
-                'lat': cbg_coord[1],
-                'lon': cbg_coord[0]
-            })
+        distance, stop_index = stop_tree.query(cbg_coord)
+        stop_I = stops_gdf.iloc[stop_index]['stop_I']
+        stop_name = stops_gdf.iloc[stop_index]['name']
+        results.append({
+            'cbg_id': census_gdf.iloc[idx]['GEOID'],
+            'stop_I': [stop_I],
+            'stop_name': [stop_name],
+            'lat': cbg_coord[1],
+            'lon': cbg_coord[0]
+        })
     return pd.DataFrame(results)
 
 def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
@@ -88,10 +87,11 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
     stops_gdf['stop_I'] = stops_gdf['stop_I'].astype(int)
     
     # Assign unique integer node IDs to CBGs
-    max_stop_id = stops_gdf['stop_I'].max()
+    max_stop_I = stops_gdf['stop_I'].max()
     
     # Extract unique CBG IDs and assign unique node IDs
-    cbg_node_ids = {cbg_id: max_stop_id + idx + 1 for idx, cbg_id in enumerate(cbgs_to_stops['cbg_id'].unique())}
+    cbg_ids = cbgs_to_stops['cbg_id'].unique()
+    cbg_node_ids = {cbg_id: max_stop_I + idx + 1 for idx, cbg_id in enumerate(cbg_ids)}
 
     # Add nodes for each CBG centroid
     for _, row in cbgs_to_stops.iterrows():
@@ -103,20 +103,19 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
     for _, row in cbgs_to_stops.iterrows():
         cbg_id = row['cbg_id']
         node_id = cbg_node_ids[cbg_id]
-        stop_ids = [int(sid) for sid in row['stop_I']]
+        stop_Is = [int(sid) for sid in row['stop_I']]
         
         cbg_coord = np.array([row['lon'], row['lat']])
-        for stop_id in stop_ids:
-            # Find stop index to access coordinates in stops_gdf
-            stop_idx = stops_gdf[stops_gdf['stop_I'] == stop_id].index[0]
-            stop_coord = np.array([stops_gdf.iloc[stop_idx].geometry.x, stops_gdf.iloc[stop_idx].geometry.y])
+        for stop_I in stop_Is:
+            stop_Ix = stops_gdf[stops_gdf['stop_I'] == stop_I].index[0]
+            stop_coord = np.array([stops_gdf.iloc[stop_Ix].geometry.x, stops_gdf.iloc[stop_Ix].geometry.y])
             
             # Calculate Euclidean distance and add edges
             distance = np.linalg.norm(cbg_coord - stop_coord)
-            walk_network.add_edge(node_id, stop_id, d_walk=distance)
-            walk_network.add_edge(stop_id, node_id, d_walk=distance)
+            walk_network.add_edge(node_id, stop_I, d_walk=distance)
+            walk_network.add_edge(stop_I, node_id, d_walk=distance)
     
-    return walk_network
+    return walk_network, cbg_node_ids
 
 
 def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_start_time, analysis_end_time):
