@@ -58,6 +58,8 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
              "Ignore this warning if running unit tests.")
         stop_distances=stop_distances.drop('d_walk', axis=1)
         stop_distances=stop_distances.rename(columns={"d": "d_walk"})
+        stop_distances=stop_distances.fillna(0)
+       
 
     else:
         osm_distances_available = True
