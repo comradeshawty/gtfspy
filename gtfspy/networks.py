@@ -19,7 +19,7 @@ DEFAULT_STOP_TO_STOP_LINK_ATTRIBUTES = [
     "d", "route_I_counts"
 ]
 
-def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None):
+def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
     """
     Construct the walk network.
     If OpenStreetMap-based walking distances have been computed, then those are used as the distance.
@@ -44,8 +44,12 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None):
     if max_link_distance is None:
         max_link_distance = 1000
     net = networkx.Graph()
-    stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
-    _add_stops_and_pois_to_net(net, gtfs.get_table("stops"), stops_gdf)
+    if pois=False:
+        _add_stops_to_net(net, gtfs.get_table("stops"))
+
+    else:
+        stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
+        _add_stops_and_pois_to_net(net, gtfs.get_table("stops"), stops_gdf)
     stop_distances = gtfs.get_table("stop_distances")
     if stop_distances["d_walk"][0] is None:
         osm_distances_available = False
@@ -74,7 +78,7 @@ def stop_to_stop_network_for_route_type(gtfs,
                                         route_type,
                                         link_attributes=None,
                                         start_time_ut=None,
-                                        end_time_ut=None):
+                                        end_time_ut=None,pois=False):
     """
     Get a stop-to-stop network describing a single mode of travel.
 
@@ -107,12 +111,13 @@ def stop_to_stop_network_for_route_type(gtfs,
     if link_attributes is None:
         link_attributes = DEFAULT_STOP_TO_STOP_LINK_ATTRIBUTES
     assert(route_type in route_types.TRANSIT_ROUTE_TYPES)
-
     stops_dataframe = gtfs.get_stops_for_route_type(route_type)
     net = networkx.DiGraph()
-    stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
-
-    _add_stops_and_pois_to_net(net, stops_dataframe, stops_gdf)
+    if pois=False:
+        _add_stops_to_net(net, stops_dataframe)
+    else:                                    
+        stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')                                    
+        _add_stops_and_pois_to_net(net, stops_dataframe, stops_gdf)
 
     events_df = gtfs.get_transit_events(start_time_ut=start_time_ut,
                                         end_time_ut=end_time_ut,
@@ -263,6 +268,22 @@ def _add_stops_and_pois_to_net(net, stops, stops_gdf):
 
               # Add an edge between the stop and the POI with the distance as the weight
               net.add_edge(stop.stop_I, poi, weight=distance)
+def _add_stops_to_net(net, stops):
+    """
+    Add nodes to the network from the pandas dataframe describing (a part of the) stops table in the GTFS database.
+
+    Parameters
+    ----------
+    net: networkx.Graph
+    stops: pandas.DataFrame
+    """
+    for stop in stops.itertuples():
+        data = {
+            "lat": stop.lat,
+            "lon": stop.lon,
+            "name": stop.name
+        }
+        net.add_node(stop.stop_I, **data)
 
 def temporal_network(gtfs,
                      start_time_ut=None,
