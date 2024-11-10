@@ -59,7 +59,7 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
             'lat': cbg_coord[1],
             'lon': cbg_coord[0]
         })
-    return pd.DataFrame(results)
+    return pd.DataFrame(results), stops_gdf
 
 def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
     """
