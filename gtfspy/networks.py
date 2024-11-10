@@ -47,11 +47,9 @@ def walk_transfer_stop_to_stop_network(gtfs, pois=False):
     net = networkx.Graph()
     if pois==False:
         stops = G.get_table("stops")
-        stops['geometry'] = stops.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
-        stops_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326").to_crs(epsg=32616)
 
         
-        _add_stops_to_net(net, stops_gdf)
+        _add_stops_to_net(net, stops)
 
     else:
         stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
