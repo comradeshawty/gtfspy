@@ -29,7 +29,7 @@ def get_transit_connections(gtfs, start_time_ut, end_time_ut):
                 )
 
 
-def get_walk_network(gtfs, max_link_distance_m=1000):
+def get_walk_network(gtfs, pois=False):
     """
     Parameters
     ----------
