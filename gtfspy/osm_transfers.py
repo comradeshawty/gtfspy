@@ -101,7 +101,7 @@ def match_stops_to_nodes(gtfs, walk_network):
         maps stop_I to the distance to the closest walk_network node
     """
     # Extract node coordinates from the OSMnx walkable network
-    network_nodes = {node: (data['y'], data['x']) for node, data in walk_network.nodes(data=True)}
+    network_nodes = {node: (data['lat'], data['lon']) for node, data in walk_network.nodes(data=True)}
     
     # Get the list of stop_I and their coordinates from the GTFS data
     stop_Is = set(gtfs.get_straight_line_transfer_distances()['from_stop_I'])
@@ -114,8 +114,8 @@ def match_stops_to_nodes(gtfs, walk_network):
     # Iterate through all stops in the GTFS data
     for stop_I in stop_Is:
         # Get stop latitude and longitude
-        stop_lat = float(stops_df[stops_df.stop_I == stop_I].lat)
-        stop_lon = float(stops_df[stops_df.stop_I == stop_I].lon)
+        stop_lat = float(stops_df[stops_df.stop_I == stop_I].lat.iloc[0])
+        stop_lon = float(stops_df[stops_df.stop_I == stop_I].lon.iloc[0])
 
         # Find the nearest network node to the stop using OSMnx
         nearest_node = ox.distance.nearest_nodes(walk_network, stop_lon, stop_lat)
@@ -123,7 +123,7 @@ def match_stops_to_nodes(gtfs, walk_network):
         nearest_node_lon = network_nodes[nearest_node][1]
 
         # Calculate the Euclidean distance between the stop and the nearest network node
-        dist = ox.distance.great_circle_vec(stop_lat, stop_lon, nearest_node_lat, nearest_node_lon)  # in meters
+        dist = ox.distance.great_circle(stop_lat, stop_lon, nearest_node_lat, nearest_node_lon)  # in meters
 
         # Store the results
         stop_I_to_node[stop_I] = nearest_node
