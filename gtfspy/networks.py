@@ -5,7 +5,8 @@ from gtfspy import route_types
 from gtfspy.util import wgs84_distance, graph_node_attrs
 from warnings import warn
 from ast import literal_eval
-
+import geopandas as gpd
+from shapely import Point
 
 ALL_STOP_TO_STOP_LINK_ATTRIBUTES = [
     "capacity_estimate", "duration_min", "duration_max",
@@ -45,6 +46,11 @@ def walk_transfer_stop_to_stop_network(gtfs, pois=False):
         #max_link_distance = 1000
     net = networkx.Graph()
     if pois==False:
+        stops = G.get_table("stops")
+        stops['geometry'] = stops.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
+        stops_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326").to_crs(epsg=32616)
+
+        
         _add_stops_to_net(net, stops_gdf)
 
     else:
