@@ -51,7 +51,7 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
     for idx, cbg_coord in enumerate(cbg_coords):
         stop_indices = stop_tree.query_ball_point(cbg_coord, radius)
         if stop_indices:
-            stop_I = [stops_gdf.iloc[i]['stop_id'] for i in stop_indices]
+            stop_I = [stops_gdf.iloc[i]['stop_I'] for i in stop_indices]
             stop_name = [stops_gdf.iloc[i]['name'] for i in stop_indices]
             results.append({
                 'cbg_id': census_gdf.iloc[idx]['GEOID'],
@@ -85,10 +85,10 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
         raise TypeError("stops_gdf should be a pandas DataFrame")
 
     # Ensure that stop IDs are integers
-    stops_gdf['stop_id'] = stops_gdf['stop_id'].astype(int)
+    stops_gdf['stop_I'] = stops_gdf['stop_I'].astype(int)
     
     # Assign unique integer node IDs to CBGs
-    max_stop_id = stops_gdf['stop_id'].max()
+    max_stop_id = stops_gdf['stop_I'].max()
     
     # Extract unique CBG IDs and assign unique node IDs
     cbg_node_ids = {cbg_id: max_stop_id + idx + 1 for idx, cbg_id in enumerate(cbgs_to_stops['cbg_id'].unique())}
@@ -108,7 +108,7 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
         cbg_coord = np.array([row['lon'], row['lat']])
         for stop_id in stop_ids:
             # Find stop index to access coordinates in stops_gdf
-            stop_idx = stops_gdf[stops_gdf['stop_id'] == stop_id].index[0]
+            stop_idx = stops_gdf[stops_gdf['stop_I'] == stop_id].index[0]
             stop_coord = np.array([stops_gdf.iloc[stop_idx].geometry.x, stops_gdf.iloc[stop_idx].geometry.y])
             
             # Calculate Euclidean distance and add edges
