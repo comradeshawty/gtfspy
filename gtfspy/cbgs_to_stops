@@ -28,7 +28,7 @@ def init_db(gtfs_path, db_name):
     return GTFS(gtfs_conn)
 
   
-def find_cbgs_to_stops(G, census_gdf_path, radius=2000):
+def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
     
     # Load Census and stops data
     census_gdf = gpd.read_file(census_gdf_path)
