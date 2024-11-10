@@ -73,9 +73,10 @@ def walk_transfer_stop_to_stop_network(gtfs, pois=False):
                 continue
             data = {'d': stop_distance_tuple.d, 'd_walk': stop_distance_tuple.d_walk}
         else:
+            data = {'d_walk': stop_distance_tuple.d_walk}
             #if stop_distance_tuple.d_walk > max_link_distance:
                 #continue
-            data = {'d_walk': stop_distance_tuple.d_walk}
+            
         net.add_edge(from_node, to_node, **data)
     return net
 
