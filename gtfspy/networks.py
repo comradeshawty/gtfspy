@@ -19,7 +19,7 @@ DEFAULT_STOP_TO_STOP_LINK_ATTRIBUTES = [
     "d", "route_I_counts"
 ]
 
-def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
+def walk_transfer_stop_to_stop_network(gtfs, pois=False):
     """
     Construct the walk network.
     If OpenStreetMap-based walking distances have been computed, then those are used as the distance.
@@ -41,8 +41,8 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
             d_walk:
                 distance along the road/tracks/..
     """
-    if max_link_distance is None:
-        max_link_distance = 1000
+    #if max_link_distance is None:
+        #max_link_distance = 1000
     net = networkx.Graph()
     if pois==False:
         _add_stops_to_net(net, stops_gdf)
@@ -69,12 +69,12 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
         to_node = stop_distance_tuple.to_stop_I
 
         if osm_distances_available:
-            if stop_distance_tuple.d_walk > max_link_distance or isnan(stop_distance_tuple.d_walk):
+            if stop_distance_tuple.d_walk > 1000 or isnan(stop_distance_tuple.d_walk):
                 continue
             data = {'d': stop_distance_tuple.d, 'd_walk': stop_distance_tuple.d_walk}
         else:
-            if stop_distance_tuple.d_walk > max_link_distance:
-                continue
+            #if stop_distance_tuple.d_walk > max_link_distance:
+                #continue
             data = {'d_walk': stop_distance_tuple.d_walk}
         net.add_edge(from_node, to_node, **data)
     return net
