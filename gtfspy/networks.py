@@ -44,7 +44,7 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=None,pois=False):
     if max_link_distance is None:
         max_link_distance = 1000
     net = networkx.Graph()
-    if pois=False:
+    if pois==False:
         _add_stops_to_net(net, gtfs.get_table("stops"))
 
     else:
@@ -113,7 +113,7 @@ def stop_to_stop_network_for_route_type(gtfs,
     assert(route_type in route_types.TRANSIT_ROUTE_TYPES)
     stops_dataframe = gtfs.get_stops_for_route_type(route_type)
     net = networkx.DiGraph()
-    if pois=False:
+    if pois==False:
         _add_stops_to_net(net, stops_dataframe)
     else:                                    
         stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')                                    
