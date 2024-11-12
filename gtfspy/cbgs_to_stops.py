@@ -186,31 +186,21 @@ def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_
 
         # Iterate over target CBGs
         for target_cbg_id in cbg_ids:
-            target_node_id = cbg_node_ids[target_cbg_id]
             if target_cbg_id == origin_cbg_id:
-                T_cbg[origin_cbg_id][target_cbg_id] = 0
+                T_cbg[origin_cbg_id][target_cbg_id] = 0  # Travel time to self is zero
             else:
-                target_profile = profiles.get(target_node_id, None)
+                target_node_id = cbg_node_ids[target_cbg_id]
                 profile = stop_profiles.get(target_node_id, None)
-
                 if profile:
-                    labels = target_profile.get_final_optimal_labels()
+                    # Extract the optimal travel time label
+                    labels = profile.get_final_optimal_labels()
                     min_time = min([label.arrival_time_target - label.departure_time for label in labels], default=None)
                     T_cbg[origin_cbg_id][target_cbg_id] = min_time if min_time else float('nan')
                 else:
-                T_cbg[origin_cbg_id][target_cbg_id] = float('nan')
+                    T_cbg[origin_cbg_id][target_cbg_id] = float('nan')
+        
+        print(f"Processed CBG {idx + 1}/{len(cbg_ids)}")
 
-                    # For each label, get the travel time
-                   # travel_times = [label.arrival_time_target - label.departure_time for label in labels]
-                    if travel_times:
-                        travel_time = min(travel_times)
-                        T_cbg[origin_cbg_id][target_cbg_id] = travel_time
-                    else:
-                        T_cbg[origin_cbg_id][target_cbg_id] = np.nan
-               # else:
-                    #T_cbg[origin_cbg_id][target_cbg_id] = np.nan
+    T_cbg_df = pd.DataFrame(T_cbg).T
+    T_cbg_df.to_csv('cbg_travel_times.csv')
 
-        print(f"Processed CBG {idx+1}/{len(cbg_ids)}")
-
-    return pd.DataFrame(T_cbg).T
-T_cbg_df.fillna(9999, inplace=True)
