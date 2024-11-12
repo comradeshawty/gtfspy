@@ -1,7 +1,7 @@
 import pandas as pd
 import networkx as nx
 from multiprocessing import Pool, cpu_count
-from gtfspy.routing.multiobjective_pseudo_csa_profiler import MultiObjectivePseudoCSAProfiler
+from gtfspy.routing.multi_objective_pseudo_connection_scan_profiler import MultiObjectivePseudoCSAProfiler
 
 def calculate_travel_times_parallel(cbg_ids, cbg_node_ids, walk_network, transit_events, 
                                     analysis_start_time_ut, analysis_end_time_ut, transfer_margin=120, 
