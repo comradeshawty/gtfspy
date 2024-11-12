@@ -17,7 +17,7 @@ import pandas as pd
 from scipy.spatial import cKDTree
 from shapely import Point
 from ast import literal_eval
-
+from multiprocessing import Pool, cpu_count
 
 
 def init_db(gtfs_path, db_name):
@@ -202,5 +202,43 @@ def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_
         print(f"Processed CBG {idx + 1}/{len(cbg_ids)}")
 
     T_cbg_df = pd.DataFrame(T_cbg).T
+    T_cbg_df.fillna(9999, inplace=True)
     T_cbg_df.to_csv('cbg_travel_times.csv')
+
+
+
+def process_cbg_origin(origin_cbg_id):
+    origin_node_id = cbg_node_ids[origin_cbg_id]
+    if origin_node_id not in walk_network.nodes():
+        return origin_cbg_id, {}
+
+    valid_targets = [cbg_node_ids[cbg_id] for cbg_id in cbg_ids if cbg_id != origin_cbg_id]
+
+    profiler.reset(valid_targets)
+    profiler.run()
+
+    stop_profiles = profiler.stop_profiles
+    travel_times = {}
+    for target_cbg_id in cbg_ids:
+        if target_cbg_id == origin_cbg_id:
+            travel_times[target_cbg_id] = 0
+        else:
+            target_node_id = cbg_node_ids[target_cbg_id]
+            profile = stop_profiles.get(target_node_id, None)
+            if profile:
+                labels = profile.get_final_optimal_labels()
+                min_time = min([label.arrival_time_target - label.departure_time for label in labels], default=None)
+                travel_times[target_cbg_id] = min_time if min_time else float('nan')
+            else:
+                travel_times[target_cbg_id] = float('nan')
+    return origin_cbg_id, travel_times
+
+# Use multiprocessing to process CBGs in parallel
+with Pool(cpu_count()) as pool:
+    results = pool.map(process_cbg_origin, cbg_ids)
+
+T_cbg = {origin: times for origin, times in results}
+T_cbg_df = pd.DataFrame(T_cbg).T
+T_cbg_df.fillna(9999, inplace=True)
+T_cbg_df.to_csv('cbg_travel_times_parallel.csv')
 
