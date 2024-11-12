@@ -204,3 +204,113 @@ def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_
     T_cbg_df = pd.DataFrame(T_cbg).T
     T_cbg_df.fillna(9999, inplace=True)
     T_cbg_df.to_csv('cbg_travel_times.csv')
+
+
+# Function for processing each CBG origin in parallel
+def process_origin_cbg(origin_cbg_id, cbg_ids, cbg_node_ids, all_node_ids, connections, walk_network, analysis_start_time, analysis_end_time):
+
+    origin_node_id = cbg_node_ids[origin_cbg_id]
+    if origin_node_id not in all_node_ids:
+        print(f"Origin node {origin_node_id} not found in network.")
+        return origin_cbg_id, None
+
+    # Prepare targets as other CBG centroid node IDs
+    valid_targets = [cbg_node_ids[cbg_id] for cbg_id in cbg_ids if cbg_id != origin_cbg_id]
+
+    # Set up the profiler with the origin node
+    profiler = MultiObjectivePseudoCSAProfiler(
+        connections,
+        targets=valid_targets,
+        start_time_ut=analysis_start_time,
+        end_time_ut=analysis_end_time,
+        transfer_margin=120,  # seconds
+        walk_network=walk_network,
+        walk_speed=1.5,  # meters per second
+        verbose=False,
+        track_vehicle_legs=True,
+        track_time=True
+    )
+    profiler.reset(valid_targets)
+
+    # Run the profiler and collect results
+    profiler.run()
+    stop_profiles = profiler.stop_profiles
+
+    # Initialize the travel time dictionary for this origin
+    travel_times = {}
+
+    # Iterate over target CBGs
+    for target_cbg_id in cbg_ids:
+        if target_cbg_id == origin_cbg_id:
+            travel_times[target_cbg_id] = 0  # Travel time to self is zero
+        else:
+            target_node_id = cbg_node_ids[target_cbg_id]
+            profile = stop_profiles.get(target_node_id, None)
+            if profile:
+                # Extract the optimal travel time label
+                labels = profile.get_final_optimal_labels()
+                min_time = min([label.arrival_time_target - label.departure_time for label in labels], default=None)
+                travel_times[target_cbg_id] = min_time if min_time is not None else np.nan
+            else:
+                travel_times[target_cbg_id] = np.nan
+
+    return origin_cbg_id, travel_times
+
+# Main function to compute the travel time matrix in parallel
+def compute_travel_time_matrix_parallel(G, walk_network, cbg_ids, cbg_node_ids, analysis_start_time, analysis_end_time):
+    """
+    Compute travel time matrix between CBG centroids using MultiObjectivePseudoCSAProfiler in parallel.
+
+    Parameters
+    ----------
+    G : GTFS
+        GTFS object containing transit information.
+    walk_network : networkx.Graph
+        Walk network graph.
+    cbg_ids : list
+        List of CBG IDs.
+    cbg_node_ids : dict
+        Mapping of CBG IDs to unique node IDs.
+    analysis_start_time : int
+        Start time of analysis in UNIX seconds.
+    analysis_end_time : int
+        End time of analysis in UNIX seconds.
+
+    Returns
+    -------
+    pd.DataFrame
+        Travel time matrix DataFrame.
+    """
+    connections = get_transit_connections(G, analysis_start_time, analysis_end_time + 2 * 3600)
+    all_node_ids = set(walk_network.nodes())
+
+    # Use multiprocessing Pool to process the travel times in parallel
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        results = [
+            pool.apply_async(
+                process_origin_cbg,
+                (origin_cbg_id, cbg_ids, cbg_node_ids, all_node_ids, connections, walk_network, analysis_start_time, analysis_end_time)
+            ) for origin_cbg_id in cbg_ids
+        ]
+
+        # Collect the results
+        T_cbg = {}
+        for idx, result in enumerate(results):
+            origin_cbg_id, travel_times = result.get()
+            if travel_times is not None:
+                T_cbg[origin_cbg_id] = travel_times
+            print(f"Processed CBG {idx + 1}/{len(cbg_ids)}")
+
+    # Convert the travel time dictionary into a pandas DataFrame
+    T_cbg_df = pd.DataFrame(T_cbg).T  # Transpose to have origins as rows and destinations as columns
+
+    # Replace NaN values with a high value to indicate inaccessibility (optional)
+    T_cbg_df.fillna(9999, inplace=True)
+
+    # Save the DataFrame to a CSV file
+    T_cbg_df.to_csv('cbg_travel_times.csv')
+
+    return T_cbg_df
+
+# Example call
+# T_cbg_df = compute_travel_time_matrix_parallel(G, walk_network, cbg_ids, cbg_node_ids, analysis_start_time, analysis_end_time)
