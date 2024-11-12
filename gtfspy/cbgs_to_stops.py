@@ -153,16 +153,17 @@ def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_
             continue
 
         # Prepare targets as other CBG centroid node IDs
-        target_cbg_ids = [cbg_id for cbg_id in cbg_ids if cbg_id != origin_cbg_id]
-        target_node_ids = [cbg_node_ids[cbg_id] for cbg_id in target_cbg_ids]
-        valid_targets = [node_id for node_id in target_node_ids if node_id in all_node_ids]
+        #target_cbg_ids = [cbg_id for cbg_id in cbg_ids if cbg_id != origin_cbg_id]
+        #target_node_ids = [cbg_node_ids[cbg_id] for cbg_id in target_cbg_ids]
+        #valid_targets = [node_id for node_id in target_node_ids if node_id in all_node_ids]
+        valid_targets = [cbg_node_ids[cbg_id] for cbg_id in cbg_ids if cbg_id != origin_cbg_id]
 
-        if not valid_targets:
-            print(f"No valid targets found for origin {origin_cbg_id}.")
-            continue
+        #if not valid_targets:
+            #print(f"No valid targets found for origin {origin_cbg_id}.")
+          #  continue
 
         # Set up the profiler with the origin node
-        mpCSA = MultiObjectivePseudoCSAProfiler(
+        profiler = MultiObjectivePseudoCSAProfiler(
             connections,
             targets=valid_targets,
             start_time_ut=analysis_start_time,
@@ -174,12 +175,12 @@ def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_
             track_vehicle_legs=True,
             track_time=True
         )
-        mpCSA.set_source_node(origin_node_id)  # Set the origin node
+        profiler.reset(valid_targets)
 
         # Run the profiler and collect results
-        mpCSA.run()
-        profiles = mpCSA.stop_profiles
-
+        profiler.run()
+        stop_profiles = profiler.stop_profiles
+        T_cbg[origin_cbg_id] = {}
         # Initialize the travel time dictionary for this origin
         T_cbg[origin_cbg_id] = {}
 
@@ -190,18 +191,26 @@ def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_
                 T_cbg[origin_cbg_id][target_cbg_id] = 0
             else:
                 target_profile = profiles.get(target_node_id, None)
-                if target_profile:
+                profile = stop_profiles.get(target_node_id, None)
+
+                if profile:
                     labels = target_profile.get_final_optimal_labels()
+                    min_time = min([label.arrival_time_target - label.departure_time for label in labels], default=None)
+                    T_cbg[origin_cbg_id][target_cbg_id] = min_time if min_time else float('nan')
+                else:
+                T_cbg[origin_cbg_id][target_cbg_id] = float('nan')
+
                     # For each label, get the travel time
-                    travel_times = [label.arrival_time_target - label.departure_time for label in labels]
+                   # travel_times = [label.arrival_time_target - label.departure_time for label in labels]
                     if travel_times:
                         travel_time = min(travel_times)
                         T_cbg[origin_cbg_id][target_cbg_id] = travel_time
                     else:
                         T_cbg[origin_cbg_id][target_cbg_id] = np.nan
-                else:
-                    T_cbg[origin_cbg_id][target_cbg_id] = np.nan
+               # else:
+                    #T_cbg[origin_cbg_id][target_cbg_id] = np.nan
 
         print(f"Processed CBG {idx+1}/{len(cbg_ids)}")
 
     return pd.DataFrame(T_cbg).T
+T_cbg_df.fillna(9999, inplace=True)
