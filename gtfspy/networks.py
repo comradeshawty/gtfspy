@@ -7,6 +7,7 @@ from warnings import warn
 from ast import literal_eval
 import geopandas as gpd
 from shapely import Point
+from gtfspy.gtfs import GTFS
 
 ALL_STOP_TO_STOP_LINK_ATTRIBUTES = [
     "capacity_estimate", "duration_min", "duration_max",
