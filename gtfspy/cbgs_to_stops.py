@@ -32,7 +32,7 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
     
     # Load Census and stops data
     census_gdf = gpd.read_file(census_gdf_path)
-    stops = gtfs.get_table("stops")
+    stops = G.get_table("stops")
     census_gdf = census_gdf.to_crs(epsg=32616)
     
     # Convert stop coordinates to GeoDataFrame
