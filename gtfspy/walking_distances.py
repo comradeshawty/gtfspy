@@ -1,5 +1,5 @@
 import networkx as nx
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 import numpy as np
 import pandas as pd
 import sqlite3
@@ -24,13 +24,14 @@ def get_nearby_nodes(walk_network, threshold_distance):
     node_positions = np.array(list(node_coords.values()))
 
     # Use KDTree for efficient distance calculation
-    node_tree = cKDTree(node_positions)
+    node_tree = KDTree(node_positions)
 
     # Find all pairs of nodes within the threshold distance
     nearby_nodes = {}
     for idx, node_id in enumerate(node_ids):
-        distances, indices = node_tree.query(node_positions[idx], k=len(node_ids), distance_upper_bound=threshold_distance)
+        distances, indices = kd_tree.query(node_positions[idx], k=len(node_ids), distance_upper_bound=threshold_distance)
         nearby_nodes[node_id] = [node_ids[i] for i in indices if distances[i] < threshold_distance and distances[i] > 0]
+
 
     return nearby_nodes
 def precompute_walking_distances(walk_network, nearby_nodes):
