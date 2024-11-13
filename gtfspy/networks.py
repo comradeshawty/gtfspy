@@ -1,4 +1,4 @@
-import networkx as nx
+import networkx
 import pandas as pd
 from math import isnan
 from gtfspy import route_types
@@ -61,7 +61,7 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=1000):
             d: straight-line distance between stops
             d_walk: distance along the road/tracks if available
     """
-    net = nx.Graph()
+    net = networkx.Graph()
     stops = gtfs.get_table("stops")
     
     # Convert stops to GeoDataFrame and change CRS to EPSG:32616
