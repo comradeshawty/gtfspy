@@ -3,6 +3,11 @@ from scipy.spatial import KDTree
 import numpy as np
 import pandas as pd
 import sqlite3
+import geopandas as gpd
+import pandas as pd
+from scipy.spatial import cKDTree
+from ast import literal_eval
+
 
 def get_nearby_nodes(walk_network, threshold_distance):
     """
@@ -19,22 +24,25 @@ def get_nearby_nodes(walk_network, threshold_distance):
         A dictionary mapping each node ID to a list of nearby nodes within the threshold distance.
     """
     # Extract coordinates from the walk network
-    node_coords = {node: (data['lon'], data['lon']) for node, data in walk_network.nodes(data=True)}
+    nodes=walk_network.nodes(data=True)
+    node_coords = {node: (data['lon'], data['lat']) for node, data in walk_network.nodes(data=True)}
+    nodes_df=pd.DataFrame.from_dict(dict(walk_network.nodes(data=True)), orient='index')
+    nodes_df['geometry'] = nodes_df.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
+    nodes_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326").to_crs(epsg=32616)
+    node_coords = list(zip(nodes_gdf.geometry.x, nodes_gdf.geometry.y))
+    #node_tree = cKDTree(node_coords)
     node_ids = list(node_coords.keys())
     node_positions = np.array(list(node_coords.values()))
+    kd_tree = KDTree(node_positions)
 
-    # Use KDTree for efficient distance calculation
-    node_tree = KDTree(node_positions)
-
-    # Find all pairs of nodes within the threshold distance
     nearby_nodes = {}
     for idx, node_id in enumerate(node_ids):
-        distances, indices = node_tree.query(node_positions[idx], k=len(node_ids), distance_upper_bound=threshold_distance)
-        nearby_nodes[node_id] = [node_ids[i] for i in indices if distances[i] < threshold_distance and distances[i] > 0]
-
-
+      indices = kd_tree.query_ball_point(node_positions[idx], r=threshold_distance)
+      nearby_nodes[node_id] = [node_ids[i] for i in indices if i != idx]
     return nearby_nodes
-def precompute_walking_distances(walk_network, nearby_nodes):
+
+def precompute_walking_distances(walk_network, threshold_distance=2000):
+
     """
     Precompute walking distances between nearby nodes.
 
@@ -48,25 +56,25 @@ def precompute_walking_distances(walk_network, nearby_nodes):
     dict
         A dictionary mapping pairs of node IDs to the walking distance between them.
     """
-    walking_distances = {}
 
-    # Iterate over each node and its nearby nodes
-    for origin_node, targets in nearby_nodes.items():
-        for target_node in targets:
-            if (origin_node, target_node) not in walking_distances:
-                try:
-                    # Compute the shortest path distance using Dijkstra's algorithm
-                    distance = nx.shortest_path_length(walk_network, source=origin_node, target=target_node, weight='distance')
-                    walking_distances[(origin_node, target_node)] = distance
-                    walking_distances[(target_node, origin_node)] = distance  # Assume distance is symmetric
-                except nx.NetworkXNoPath:
-                    # In case there is no path between nodes
-                    walking_distances[(origin_node, target_node)] = float('inf')
-                    walking_distances[(target_node, origin_node)] = float('inf')
+    node_ids = list(walk_network.nodes)
+    node_positions = np.array([(walk_network.nodes[node]['lon'], walk_network.nodes[node]['lat']) for node in node_ids])
 
-    return walking_distances
+    node_tree = cKDTree(node_positions)
+    precomputed_distances = {}
+    for idx, node_id in enumerate(node_ids):
+        distances, indices = node_tree.query(node_positions[idx], k=len(node_ids), distance_upper_bound=threshold_distance)
 
-import pandas as pd
+        # Iterate over neighbors
+        for distance, index in zip(distances, indices):
+            if index != idx and distance < threshold_distance and distance > 0:
+                other_node_id = node_ids[index]
+                # Use a sorted tuple to prevent duplicate pairs (e.g., (1, 2) and (2, 1))
+                node_pair = tuple(sorted((node_id, other_node_id)))
+                precomputed_distances[node_pair] = distance
+
+    return precomputed_distances
+
 
 def save_walking_distances_to_csv(walking_distances, filename='walking_distances.csv'):
     """
@@ -139,5 +147,3 @@ def load_walking_distances_from_db(db_filename='walking_distances.db'):
 
 # Load precomputed distances from the database
 #precomputed_distances = load_walking_distances_from_db()
-
-
