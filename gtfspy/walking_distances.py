@@ -29,7 +29,7 @@ def get_nearby_nodes(walk_network, threshold_distance):
     # Find all pairs of nodes within the threshold distance
     nearby_nodes = {}
     for idx, node_id in enumerate(node_ids):
-        distances, indices = kd_tree.query(node_positions[idx], k=len(node_ids), distance_upper_bound=threshold_distance)
+        distances, indices = node_tree.query(node_positions[idx], k=len(node_ids), distance_upper_bound=threshold_distance)
         nearby_nodes[node_id] = [node_ids[i] for i in indices if distances[i] < threshold_distance and distances[i] > 0]
 
 
