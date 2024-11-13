@@ -72,7 +72,7 @@ def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=1000):
 
     # Add stops as nodes to the network
     for _, row in stops_gdf.iterrows():
-        net.add_node(row['stop_I'], x=row.geometry.x, y=row.geometry.y)
+        net.add_node(row['stop_I'], lon=row.geometry.x, lat=row.geometry.y)
 
     # Retrieve pre-computed distances (e.g., OSM-based or fallback)
     stop_distances = gtfs.get_table("stop_distances")
