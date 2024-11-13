@@ -20,7 +20,26 @@ DEFAULT_STOP_TO_STOP_LINK_ATTRIBUTES = [
     "d", "route_I_counts"
 ]
 
-def walk_transfer_stop_to_stop_network(gtfs, pois=False):
+def get_walk_network(gtfs, pois=False, max_link_distance=1000):
+    """
+    Parameters
+    ----------
+    gtfs: gtfspy.GTFS
+        GTFS object containing transit information.
+    pois: bool, optional
+        Whether to include Points of Interest (POIs) in the walk network.
+    max_link_distance: int, optional
+        Maximum distance for walking links (in meters).
+
+    Returns
+    -------
+    walk_network: networkx.Graph
+        The generated walking network graph.
+    """
+    assert isinstance(gtfs, GTFS), "Input must be a GTFS object"
+    return walk_transfer_stop_to_stop_network(gtfs, max_link_distance=max_link_distance)
+
+def walk_transfer_stop_to_stop_network(gtfs, max_link_distance=1000):
     """
     Construct the walk network.
     If OpenStreetMap-based walking distances have been computed, then those are used as the distance.
@@ -29,64 +48,60 @@ def walk_transfer_stop_to_stop_network(gtfs, pois=False):
     Parameters
     ----------
     gtfs: gtfspy.GTFS
+        The GTFS object with stop and distance data.
     max_link_distance: int, optional
-        If given, all walking transfers with great circle distance longer
-        than this limit (expressed in meters) will be omitted.
+        All walking transfers with a distance longer than this limit
+        (expressed in meters) will be omitted.
 
     Returns
     -------
     net: networkx.DiGraph
-        edges have attributes
-            d:
-                straight-line distance between stops
-            d_walk:
-                distance along the road/tracks/..
+        Edges have attributes:
+            d: straight-line distance between stops
+            d_walk: distance along the road/tracks if available
     """
-    #if max_link_distance is None:
-        #max_link_distance = 1000
-    net = networkx.Graph()
-    stops=gtfs.get_table("stops")
-    stops['geometry'] = stops.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
-    stops_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326")
-    stops = stops_gdf.to_crs(epsg=32616)
-    stops['lon'] = stops.geometry.x
-    stops['lat'] = stops.geometry.y
-      
+    net = nx.Graph()
+    stops = gtfs.get_table("stops")
+    
+    # Convert stops to GeoDataFrame and change CRS to EPSG:32616
+    stops_gdf = gpd.GeoDataFrame(
+        stops,
+        geometry=gpd.points_from_xy(stops['lon'], stops['lat']),
+        crs="EPSG:4326"
+    ).to_crs(epsg=32616)
 
-    if pois==False:
-        _add_stops_to_net(net, stops)
+    # Add stops as nodes to the network
+    for _, row in stops_gdf.iterrows():
+        net.add_node(row['stop_I'], x=row.geometry.x, y=row.geometry.y)
 
-    else:
-        stops_gdf=pd.read_csv('/content/drive/MyDrive/safegraph/stops_gdf')
-        _add_stops_and_pois_to_net(net, gtfs.get_table("stops"), stops_gdf)
+    # Retrieve pre-computed distances (e.g., OSM-based or fallback)
     stop_distances = gtfs.get_table("stop_distances")
+    osm_distances_available = stop_distances['d_walk'].notna().all()
 
-    if stop_distances["d_walk"][0] is None:
-        osm_distances_available = False
-        warn("Warning: OpenStreetMap-based walking distances have not been computed, using euclidean distances instead."
-             "Ignore this warning if running unit tests.")
-        stop_distances=stop_distances.drop('d_walk', axis=1)
-        stop_distances=stop_distances.rename(columns={"d": "d_walk"})
-        stop_distances=stop_distances.fillna(0)
-       
+    if not osm_distances_available:
+        warnings.warn(
+            "Warning: OpenStreetMap-based walking distances have not been computed, using Euclidean distances instead. "
+            "Ignore this warning if running unit tests."
+        )
 
-    else:
-        osm_distances_available = True
-        
+    # Iterate over each stop pair and add edges based on distance
     for stop_distance_tuple in stop_distances.itertuples():
         from_node = stop_distance_tuple.from_stop_I
         to_node = stop_distance_tuple.to_stop_I
 
         if osm_distances_available:
-            if stop_distance_tuple.d_walk > 1000 or isnan(stop_distance_tuple.d_walk):
+            d_walk = stop_distance_tuple.d_walk
+            if d_walk > max_link_distance or np.isnan(d_walk):
                 continue
-            data = {'d': stop_distance_tuple.d, 'd_walk': stop_distance_tuple.d_walk}
+            data = {'d': stop_distance_tuple.d, 'd_walk': d_walk}
         else:
-            data = {'d_walk': stop_distance_tuple.d_walk}
-            #if stop_distance_tuple.d_walk > max_link_distance:
-                #continue
-            
+            d = stop_distance_tuple.d
+            if d > max_link_distance:
+                continue
+            data = {'d_walk': d}
+        
         net.add_edge(from_node, to_node, **data)
+
     return net
 
 def stop_to_stop_network_for_route_type(gtfs,
