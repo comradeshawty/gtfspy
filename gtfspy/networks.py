@@ -1,4 +1,4 @@
-import networkx
+import networkx as nx
 import pandas as pd
 from math import isnan
 from gtfspy import route_types
