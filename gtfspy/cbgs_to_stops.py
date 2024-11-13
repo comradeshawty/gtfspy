@@ -32,7 +32,7 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
     
     # Load Census and stops data
     census_gdf = gpd.read_file(census_gdf_path)
-    stops = G.get_table("stops")
+    stops = gtfs.get_table("stops")
     census_gdf = census_gdf.to_crs(epsg=32616)
     
     # Convert stop coordinates to GeoDataFrame
@@ -65,7 +65,7 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
         })
     return pd.DataFrame(results)
 
-def add_cbgs_as_nodes(walk_network, cbgs_to_stops):
+def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
     """
     Add CBG centroids as nodes and connect them to nearby stops in the walk network.
 
@@ -83,16 +83,8 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops):
     networkx.Graph
         Updated walk network graph.
     """
-    stops=G.get_table("stops")
-    stops['geometry'] = stops.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
-    stops_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326")
+    # Ensure the CRS for stops is EPSG:32616
     stops_gdf = stops_gdf.to_crs(epsg=32616)
-    stops_gdf['lon'] = stops_gdf.geometry.x
-    stops_gdf['lat'] = stops_gdf.geometry.y
-      
-
-    # Ensure that stop IDs are integers
-    stops_gdf['stop_I'] = stops_gdf['stop_I'].astype(int)
     
     # Assign unique integer node IDs to CBGs
     max_stop_I = stops_gdf['stop_I'].max()
