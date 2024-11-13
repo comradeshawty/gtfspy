@@ -29,21 +29,35 @@ def init_db(gtfs_path, db_name):
 
   
 def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
-    
+    """
+    Match CBGs to their nearest transit stops.
+
+    Parameters
+    ----------
+    G : GTFS
+        GTFS object containing transit information.
+    census_gdf_path : str
+        File path to the Census GeoDataFrame.
+    radius : float
+        Search radius in meters.
+
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame mapping each CBG to its nearest stop.
+    """
     # Load Census and stops data
     census_gdf = gpd.read_file(census_gdf_path)
     stops = G.get_table("stops")
+
+    # Convert both datasets to the same CRS (EPSG:32616)
     census_gdf = census_gdf.to_crs(epsg=32616)
     
-    # Convert stop coordinates to GeoDataFrame
+    # Convert stop coordinates to GeoDataFrame and ensure the CRS is EPSG:32616
     stops['geometry'] = stops.apply(lambda row: Point(row['lon'], row['lat']), axis=1)
-    stops_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326")
-    stops_gdf = stops_gdf.to_crs(epsg=32616)
-    stops_gdf['lon'] = stops_gdf.geometry.x
-    stops_gdf['lat'] = stops_gdf.geometry.y
+    stops_gdf = gpd.GeoDataFrame(stops, geometry='geometry', crs="EPSG:4326").to_crs(epsg=32616)
 
-    
-    # Extract coordinates
+    # Extract coordinates for CBGs and stops
     cbg_coords = np.array(list(zip(census_gdf.geometry.centroid.x, census_gdf.geometry.centroid.y)))
     stop_coords = np.array(list(zip(stops_gdf.geometry.x, stops_gdf.geometry.y)))
 
@@ -63,6 +77,7 @@ def find_cbgs_to_stops(G, census_gdf_path, radius=1000):
             'lat': cbg_coord[1],
             'lon': cbg_coord[0]
         })
+
     return pd.DataFrame(results)
 
 def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
@@ -116,6 +131,7 @@ def add_cbgs_as_nodes(walk_network, cbgs_to_stops, stops_gdf):
             walk_network.add_edge(stop_I, node_id, d_walk=distance)
     
     return walk_network, cbg_node_ids
+
 
 def compute_travel_time_matrix(G, walk_network, cbg_ids, cbg_node_ids, analysis_start_time, analysis_end_time):
     """
