@@ -330,3 +330,32 @@ def compute_travel_time_matrix_parallel(G, walk_network, cbg_ids, cbg_node_ids, 
 
 # Example call
 # T_cbg_df = compute_travel_time_matrix_parallel(G, walk_network, cbg_ids, cbg_node_ids, analysis_start_time, analysis_end_time)
+import networkx as nx
+
+def integrate_precomputed_distances(walk_network, precomputed_distances):
+    """
+    Integrate precomputed walking distances into the existing walk network graph.
+
+    Parameters
+    ----------
+    walk_network : networkx.Graph
+        The walk network graph to be updated.
+    precomputed_distances : dict
+        A dictionary where keys are tuples of node pairs (from_node, to_node)
+        and values are distances in meters.
+
+    Returns
+    -------
+    networkx.Graph
+        The updated walk network graph.
+    """
+    # Add edges with precomputed distances to the network
+    for (from_node, to_node), distance in precomputed_distances.items():
+        walk_network.add_edge(from_node, to_node, d_walk=distance)
+        walk_network.add_edge(to_node, from_node, d_walk=distance)  # Add in both directions if undirected
+
+    return walk_network
+
+# Integrate the precomputed distances into your walk network
+walk_network = integrate_precomputed_distances(walk_network, precomputed_distances)
+
