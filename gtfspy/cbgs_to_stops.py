@@ -357,5 +357,5 @@ def integrate_precomputed_distances(walk_network, precomputed_distances):
     return walk_network
 
 # Integrate the precomputed distances into your walk network
-walk_network = integrate_precomputed_distances(walk_network, precomputed_distances)
+#walk_network = integrate_precomputed_distances(walk_network, precomputed_distances)
 
